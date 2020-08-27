@@ -1,6 +1,6 @@
 use crate::types::{Action, Direction, Player, Position, Veggie};
 use std::collections::HashMap;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -30,6 +30,7 @@ impl Game {
     }
 }
 
+#[derive(Debug)]
 pub struct Message {
     pub action: Action,
     pub player: Player,
@@ -37,29 +38,32 @@ pub struct Message {
 pub struct Executor {
     pub messages: Vec<Arc<Mutex<Message>>>,
     pub game: Game,
-    pub listener: Receiver<Arc<Mutex<Message>>>,
+    pub receiver: Receiver<Arc<Mutex<Message>>>,
+    pub sender: Sender<Arc<Mutex<Message>>>,
 }
 
 impl Executor {
-    pub fn new(listener: Receiver<Arc<Mutex<Message>>>, game: Game) -> Self {
+    pub fn new(sender: Sender<Arc<Mutex<Message>>>, receiver: Receiver<Arc<Mutex<Message>>>, game: Game) -> Self {
         Executor {
             messages: vec![],
             game,
-            listener,
+            receiver,
+            sender,
         }
     }
     pub fn start(&mut self) {
         let handler = thread::Builder::new()
             .name("executor".into())
-            .spawn(move || loop {
-                let message = self.listener.recv().expect("failed to receive a message");
-                self.messages.push(message);
-                thread::sleep(Duration::from_millis(100))
-            })
-            .unwrap();
-        handler.join().unwrap()
+            .spawn(move || {
+                self.receiver.iter().for_each(|message| {
+                    self.messages.push(message.clone());
+                    self.handle(message);
+                    thread::sleep(Duration::from_millis(1000))
+                })
+            });
     }
     pub fn handle(&self, message: Arc<Mutex<Message>>) {
+        println!("handled: {:?}", *message);
         let mut message = match message.lock() {
             Ok(m) => m,
             Err(e) => panic!("failed to acquire mutex lock: {:?}", e),
@@ -68,6 +72,10 @@ impl Executor {
             Action::Eat(v) => message.player.eat(v),
             Action::Jump(direction) => message.player.jump(direction),
         }
+    }
+    pub fn shout(&self, message: Message, s: &Sender<Arc<Mutex<Message>>>) {
+        let arc_message = Arc::new(Mutex::new(message));
+        s.send(arc_message).expect("Could not send message");
     }
 }
 

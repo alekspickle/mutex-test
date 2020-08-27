@@ -55,10 +55,6 @@ impl Player {
             }
         }
     }
-    pub fn shout(&self, message: Message, s: Sender<Arc<Mutex<Message>>>) {
-        let arc_message = Arc::new(Mutex::new(message));
-        s.send(arc_message).expect("Could not send message");
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -86,7 +82,7 @@ impl Veggie {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Action {
     Eat(Veggie),
     Jump(Direction),
@@ -99,5 +95,3 @@ pub enum Direction {
     Left,
     Right,
 }
-
-
