@@ -1,7 +1,3 @@
-use crate::executor::Message;
-use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
-
 #[derive(Default, Clone, Debug)]
 pub struct Player {
     pub id: u32,

@@ -1,9 +1,8 @@
 use crate::types::{Action, Direction, Player, Position, Veggie};
 use std::collections::HashMap;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+use std::thread::{self, JoinHandle};
 
 #[derive(Debug, Default)]
 pub struct Game {
@@ -30,52 +29,50 @@ impl Game {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Message {
     pub action: Action,
     pub player: Player,
 }
 pub struct Executor {
-    pub messages: Vec<Arc<Mutex<Message>>>,
+    pub messages: Vec<Message>,
     pub game: Game,
-    pub receiver: Receiver<Arc<Mutex<Message>>>,
-    pub sender: Sender<Arc<Mutex<Message>>>,
+    pub receiver: Arc<Mutex<Receiver<Message>>>,
 }
 
 impl Executor {
-    pub fn new(sender: Sender<Arc<Mutex<Message>>>, receiver: Receiver<Arc<Mutex<Message>>>, game: Game) -> Self {
+    pub fn new(receiver: Arc<Mutex<Receiver<Message>>>, game: Game) -> Self {
         Executor {
-            messages: vec![],
+            messages: Vec::with_capacity(100),
             game,
             receiver,
-            sender,
         }
     }
-    pub fn start(&mut self) {
+    pub fn start(
+        &mut self,
+    ) -> Result<(), std::boxed::Box<(dyn std::any::Any + std::marker::Send + 'static)>> {
         let handler = thread::Builder::new()
             .name("executor".into())
             .spawn(move || {
-                self.receiver.iter().for_each(|message| {
-                    self.messages.push(message.clone());
+                let rec = *self
+                    .receiver
+                    .lock()
+                    .expect("failed to lock on a receiver in executor thread");
+                rec.iter().for_each(|message| {
+                    let mut messages = *self.messages;
+                    self.messages = messages.push(message.clone());
                     self.handle(message);
-                    thread::sleep(Duration::from_millis(1000))
                 })
-            });
+            })
+            .expect("could not spawn executor thread");
+        handler.join()
     }
-    pub fn handle(&self, message: Arc<Mutex<Message>>) {
-        println!("handled: {:?}", *message);
-        let mut message = match message.lock() {
-            Ok(m) => m,
-            Err(e) => panic!("failed to acquire mutex lock: {:?}", e),
-        };
+    pub fn handle(&self, message: Message) {
+        println!("handled: {:?}", message);
         match message.action.clone() {
             Action::Eat(v) => message.player.eat(v),
             Action::Jump(direction) => message.player.jump(direction),
         }
-    }
-    pub fn shout(&self, message: Message, s: &Sender<Arc<Mutex<Message>>>) {
-        let arc_message = Arc::new(Mutex::new(message));
-        s.send(arc_message).expect("Could not send message");
     }
 }
 
