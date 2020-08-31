@@ -7,9 +7,10 @@ use executor::{Executor, Game, Message};
 
 fn main() {
     let (tx, rx) = channel::<Message>();
-    let mut e = Executor::new(Arc::new(Mutex::new(rx)), Game::new());
+    let rec = Arc::new(Mutex::new(rx));
+    let mut e = Executor::new(rec, Game::new());
     println!("Starting executor");
-    e.start();
+    let _join = e.start();
 
     println!("Creating peter");
     let peter = e.game.add_player("Peter".into());
@@ -19,15 +20,12 @@ fn main() {
     println!("Peter's position is: {:#?}", peter.position);
     println!("Hanna's life level is: {}", hanna.life);
 
-    tx.send(Message::jump_left(peter))
+    tx.send(Message::jump_left(peter.id))
         .expect("Could not send message");
-    tx.send(Message::eat_carrot(hanna))
+    tx.send(Message::eat_carrot(hanna.id))
         .expect("Could not send message");
 
     println!("Peter's position is: {:#?}", peter.position);
     println!("Hanna's life level is: {}", hanna.life);
 }
 
-pub fn dispatch(s: Sender<Message>, message: Message) {
-    s.send(message).expect("Could not send message");
-}
