@@ -1,12 +1,12 @@
 use crate::types::{Action, Direction, Player, Position, Veggie};
 use std::collections::HashMap;
-use std::sync::mpsc::Receiver;
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
+use std::time::Duration;
 
 #[derive(Debug, Default)]
 pub struct Game {
-    players: HashMap<u32, Player>,
+    pub players: HashMap<u32, Player>,
 }
 
 impl Game {
@@ -35,58 +35,39 @@ pub struct Message {
     pub player: u32,
 }
 pub struct Executor {
-    // pub messages: Arc<Mutex<Vec<Message>>>,
+    pub messages: Vec<Message>,
     pub game: Game,
-    pub receiver: Arc<Mutex<Receiver<Message>>>,
+    pub sender: Sender<Message>,
 }
 
 impl Executor {
-    pub fn new(receiver: Arc<Mutex<Receiver<Message>>>, game: Game) -> Self {
-        // let messages = Arc::new(Mutex::new(Vec::with_capacity(100)));
+    pub fn new(sender: Sender<Message>, game: Game) -> Self {
         Executor {
-            // messages,
+            messages: Vec::new(),
             game,
-            receiver,
+            sender,
         }
     }
-    pub fn start(
-        &mut self,
-    ) -> Result<(), std::boxed::Box<(dyn std::any::Any + std::marker::Send + 'static)>> {
-        // let handler = thread::Builder::new()
-        //     .name("executor".into())
-        //     .spawn(move || {
-        let rec = &*self
-            .receiver
-            .lock()
-            .expect("failed to lock on a receiver in executor thread");
-        // let mut messages = self
-        // .messages
-        // .lock()
-        // .expect("failed to lock on a receiver in executor thread");
-        let mut messages = Vec::new();
-        rec.iter().for_each(|message| {
-            messages.push(message.clone());
-        });
-        // })
-        // .expect("could not spawn executor thread");
-        // handler.join()
-
-        self.handle(messages);
-        Ok(())
+    pub fn start(&mut self, r: Receiver<Message>) {
+        loop {
+            r.iter().for_each(|message| {
+                self.messages.push(message.clone());
+                self.handle(self.messages.clone());
+            });
+            thread::sleep(Duration::from_millis(1000))
+        }
     }
-    pub fn handle(&mut self, messages: Vec<Message>) {
-        messages.into_iter().for_each(|m|{
+    fn handle(&mut self, messages: Vec<Message>) {
+        messages.into_iter().for_each(|m| {
+            let message = m.clone();
 
-            println!("handled: {:?}", m);
-            let mut message = m.clone();
-            
-            let mut player = self.game.players.get_mut(&message.player).unwrap();
+            let player = self.game.players.get_mut(&message.player).unwrap();
             match message.action.clone() {
                 Action::Eat(v) => player.eat(v),
                 Action::Jump(direction) => player.jump(direction),
             }
         })
-        }
+    }
 }
 
 impl Message {
